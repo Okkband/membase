@@ -193,6 +193,10 @@ async def insert_blob(
         get_int_key(TelemetryKeyName.llm_input_tokens, project_id),
         get_int_key(TelemetryKeyName.llm_output_tokens, project_id),
     )
+    result = await controllers.user.get_user(user_id, project_id)
+    if result._Promise__errcode == CODE.NOT_FOUND:
+        LOG.info(f"User {user_id} not found")
+        p = await controllers.user.create_user(res.UserData(id=user_id), project_id)
     p = await get_project_status(project_id)
     if not p.ok():
         return p.to_response(res.IdResponse)
