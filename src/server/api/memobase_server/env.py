@@ -3,25 +3,32 @@ Initialize logger, encoder, and config.
 """
 
 import os
+import datetime
 from rich.logging import RichHandler
 import yaml
 import logging
 import tiktoken
 import dataclasses
 from dataclasses import dataclass, field
-from typing import Optional, Literal
+from typing import Optional, Literal, Union
 from dotenv import load_dotenv
+from zoneinfo import ZoneInfo
+from datetime import timezone
 
 load_dotenv()
 
 
 class ProjectStatus:
+    ultra = "ultra"
+    pro = "pro"
     active = "active"
     suspended = "suspended"
 
 
 USAGE_TOKEN_LIMIT_MAP = {
     ProjectStatus.active: int(os.getenv("USAGE_TOKEN_LIMIT_ACTIVE", -1)),
+    ProjectStatus.pro: int(os.getenv("USAGE_TOKEN_LIMIT_PRO", -1)),
+    ProjectStatus.ultra: int(os.getenv("USAGE_TOKEN_LIMIT_ULTRA", -1)),
 }
 
 
@@ -43,6 +50,11 @@ class TelemetryKeyName:
 class Config:
     # IMPORTANT!
     persistent_chat_blobs: bool = False
+    use_timezone: Optional[
+        Literal[
+            "UTC", "America/New_York", "Europe/London", "Asia/Tokyo", "Asia/Shanghai"
+        ]
+    ] = None
 
     system_prompt: str = None
     buffer_flush_interval: int = 60 * 60  # 1 hour
@@ -65,6 +77,9 @@ class Config:
     additional_user_profiles: list[dict] = field(default_factory=list)
     overwrite_user_profiles: Optional[list[dict]] = None
 
+    # Telemetry
+    telemetry_deployment_environment: str = "local"
+
     @classmethod
     def load_config(cls) -> "Config":
         if not os.path.exists("config.yaml"):
@@ -81,6 +96,14 @@ class Config:
         overwrite_config = dataclasses.replace(cls(), **filtered_config)
         LOG.info(f"{overwrite_config}")
         return overwrite_config
+
+    @property
+    def timezone(self) -> timezone:
+        if self.use_timezone is None:
+            return datetime.datetime.now().astimezone().tzinfo
+
+        # For named timezones, we need to use the datetime.timezone.ZoneInfo
+        return ZoneInfo(self.use_timezone)
 
 
 @dataclass

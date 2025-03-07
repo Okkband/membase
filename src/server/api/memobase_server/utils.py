@@ -2,7 +2,7 @@ import yaml
 from typing import cast
 from datetime import timezone, datetime
 from functools import wraps
-from .env import ENCODER, LOG
+from .env import ENCODER, LOG, CONFIG
 from .models.blob import Blob, BlobType, ChatBlob, DocBlob, OpenAICompatibleMessage
 from .models.database import GeneralBlob
 from .models.response import UserEventData
@@ -10,7 +10,7 @@ from .connectors import get_redis_client, PROJECT_ID
 
 
 def event_str_repr(event: UserEventData) -> str:
-    happened_at = event.created_at.astimezone().strftime("%Y/%m/%d %I:%M%p")
+    happened_at = event.created_at.astimezone(CONFIG.timezone).strftime("%Y/%m/%d")
     event_data = event.event_data
 
     profile_deltas = [
@@ -49,11 +49,11 @@ def get_message_timestamp(
     message: OpenAICompatibleMessage, fallback_blob_timestamp: datetime
 ):
     fallback_blob_timestamp = fallback_blob_timestamp or datetime.now()
-    fallback_blob_timestamp = fallback_blob_timestamp.astimezone()
+    fallback_blob_timestamp = fallback_blob_timestamp.astimezone(CONFIG.timezone)
     return (
         message.created_at
         if message.created_at
-        else fallback_blob_timestamp.strftime("%Y/%m/%d %I:%M%p")
+        else fallback_blob_timestamp.strftime("%Y/%m/%d")
     )
 
 

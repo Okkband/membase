@@ -6,6 +6,8 @@ from datetime import datetime
 
 @dataclass
 class UserProfile:
+    id: str
+    created_at: datetime
     updated_at: datetime
     topic: str
     sub_topic: str
@@ -25,10 +27,12 @@ class UserProfileData(BaseModel):
 
     def to_ds(self):
         return UserProfile(
-            updated_at=self.updated_at,
+            id=self.id,
+            content=self.content,
             topic=self.attributes.get("topic", "NONE"),
             sub_topic=self.attributes.get("sub_topic", "NONE"),
-            content=self.content,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
         )
 
 

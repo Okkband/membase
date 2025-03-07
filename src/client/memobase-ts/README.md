@@ -54,6 +54,12 @@ const main = async () => {
     const ping = await client.ping()
     console.log(ping)
 
+    const config = await client.getConfig()
+    console.log(config)
+
+    const updateConfig = await client.updateConfig('a: 1')
+    console.log(updateConfig)
+
     let userId = await client.addUser()
     console.log(userId)
 
@@ -67,7 +73,7 @@ const main = async () => {
         type: BlobType.Enum.chat,
         messages: [{
             role: 'user',
-            content: 'Hello, how are you?'
+            content: 'Hello, how are you? my name is John Doe'
         }]
     }))
     console.log(blobId)
@@ -84,13 +90,20 @@ const main = async () => {
     user = await client.getOrCreateUser(userId)
     console.log(user)
 
-    const profiles = await user.profile()
+    const profiles = await user.profile(2000, ['Topic1'], ['SubTopic1'], 200, { Topic1: 200 })
     console.log(profiles)
 
-    if (profiles.length > 0) {
-        const isDel = await user.deleteProfile(profiles[0].topic)
-        console.log('Delete profile success: ', isDel)
-    }
+    const event = await user.event(10, 1000)
+    console.log(event)
+
+    const context = await user.context(2000, 1000)
+    console.log(context)
+
+    profiles.map((profile) => {
+        user.deleteProfile(profile.id).then((isDel) => {
+            console.log('Delete profile success: ', isDel)
+        })
+    })
 
     const isDel = await client.deleteUser(userId)
     console.log(isDel)

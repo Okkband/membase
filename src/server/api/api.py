@@ -1,3 +1,4 @@
+import json
 import time
 import memobase_server.env
 
@@ -189,9 +190,9 @@ async def insert_blob(
     background_tasks.add_task(
         capture_int_key, TelemetryKeyName.insert_blob_request, project_id=project_id
     )
-    today_token_costs = await asyncio.gather(
-        get_int_key(TelemetryKeyName.llm_input_tokens, project_id),
-        get_int_key(TelemetryKeyName.llm_output_tokens, project_id),
+    this_month_token_costs = await asyncio.gather(
+        get_int_key(TelemetryKeyName.llm_input_tokens, project_id, in_month=True),
+        get_int_key(TelemetryKeyName.llm_output_tokens, project_id, in_month=True),
     )
     result = await controllers.user.get_user(user_id, project_id)
     if result._Promise__errcode == CODE.NOT_FOUND:
@@ -206,25 +207,31 @@ async def insert_blob(
             CODE.INTERNAL_SERVER_ERROR, f"Invalid project status: {status}"
         ).to_response(res.IdResponse)
     usage_token_limit = USAGE_TOKEN_LIMIT_MAP[status]
-    if usage_token_limit >= 0 and (usage_token_limit < sum(today_token_costs)):
+    if usage_token_limit >= 0 and (usage_token_limit < sum(this_month_token_costs)):
         return Promise.reject(
             CODE.SERVICE_UNAVAILABLE,
-            f"Your project reaches Memobase token limit today. "
-            f"quota: {usage_token_limit}, used: {sum(today_token_costs)}. "
-            "\nhttps://www.memobase.io/en/pricing for more information.",
+            f"Your project reaches Memobase token limit this month. "
+            f"quota: {usage_token_limit}, used: {sum(this_month_token_costs)}. "
+            "\nhttps://www.memobase.io/pricing for more information.",
         ).to_response(res.IdResponse)
 
-    p = await controllers.blob.insert_blob(user_id, project_id, blob_data)
-    if not p.ok():
-        return p.to_response(res.IdResponse)
+    try:
+        p = await controllers.blob.insert_blob(user_id, project_id, blob_data)
+        if not p.ok():
+            return p.to_response(res.IdResponse)
 
-    # TODO if single user insert too fast will cause random order insert to buffer
-    # So no background task for insert buffer yet
-    pb = await controllers.buffer.insert_blob_to_buffer(
-        user_id, project_id, p.data().id, blob_data.to_blob()
-    )
-    if not pb.ok():
-        return pb.to_response(res.IdResponse)
+        # TODO if single user insert too fast will cause random order insert to buffer
+        # So no background task for insert buffer yet
+        pb = await controllers.buffer.insert_blob_to_buffer(
+            user_id, project_id, p.data().id, blob_data.to_blob()
+        )
+        if not pb.ok():
+            return pb.to_response(res.IdResponse)
+    except Exception as e:
+        LOG.error(f"Error inserting blob: {e}")
+        return Promise.reject(
+            CODE.INTERNAL_SERVER_ERROR, f"Error inserting blob: {e}"
+        ).to_response(res.IdResponse)
 
     background_tasks.add_task(
         capture_int_key,
@@ -275,9 +282,24 @@ async def get_user_profile(
         None,
         description="Only return profiles with these topics, default is all",
     ),
+    max_subtopic_size: int = Query(
+        None,
+        description="Max subtopic size of the same topic in returned profile, default is all",
+    ),
+    topic_limits_json: str = Query(
+        None,
+        description='Set specific subtopic limits for topics in JSON, for example {"topic1": 3, "topic2": 5}. The limits in this param will override `max_subtopic_size`.',
+    ),
 ) -> res.UserProfileResponse:
     """Get the real-time user profiles for long term memory"""
     project_id = request.state.memobase_project_id
+    topic_limits_json = topic_limits_json or "{}"
+    try:
+        topic_limits = res.StrIntData(data=json.loads(topic_limits_json)).data
+    except Exception as e:
+        return Promise.reject(
+            CODE.BAD_REQUEST, f"Invalid topic_limits JSON: {e}"
+        ).to_response(res.UserProfileResponse)
     p = await controllers.profile.get_user_profiles(user_id, project_id)
     p = await controllers.profile.truncate_profiles(
         p.data(),
@@ -285,6 +307,8 @@ async def get_user_profile(
         topk=topk,
         max_token_size=max_token_size,
         only_topics=only_topics,
+        max_subtopic_size=max_subtopic_size,
+        topic_limits=topic_limits,
     )
     return p.to_response(res.UserProfileResponse)
 
@@ -348,33 +372,61 @@ async def get_user_context(
         None,
         description="Only return profiles with these topics, default is all",
     ),
+    max_subtopic_size: int = Query(
+        None,
+        description="Max subtopic size of the same topic in returned Context",
+    ),
+    topic_limits_json: str = Query(
+        None,
+        description='Set specific subtopic limits for topics in JSON, for example {"topic1": 3, "topic2": 5}. The limits in this param will override `max_subtopic_size`.',
+    ),
+    profile_event_ratio: float = Query(
+        0.8,
+        description="Profile event ratio of returned Context",
+    ),
 ) -> res.UserContextDataResponse:
     project_id = request.state.memobase_project_id
+    topic_limits_json = topic_limits_json or "{}"
+    try:
+        topic_limits = res.StrIntData(data=json.loads(topic_limits_json)).data
+    except Exception as e:
+        return Promise.reject(
+            CODE.BAD_REQUEST, f"Invalid topic_limits JSON: {e}"
+        ).to_response(res.UserProfileResponse)
     p = await controllers.context.get_user_context(
-        user_id, project_id, max_token_size, prefer_topics, only_topics
+        user_id,
+        project_id,
+        max_token_size,
+        prefer_topics,
+        only_topics,
+        max_subtopic_size,
+        topic_limits,
+        profile_event_ratio,
     )
     return p.to_response(res.UserContextDataResponse)
 
 
-class AuthMiddleware(BaseHTTPMiddleware):
-    PATH_MAPPINGS = {
-        "/api/v1/users/blobs": "/api/v1/users/blobs",
-        "/api/v1/users/profile": "/api/v1/users/profile",
-        "/api/v1/users": "/api/v1/users",
-        "/api/v1/blobs/insert": "/api/v1/blobs/insert",
-        "/api/v1/blobs": "/api/v1/blobs",
-        "/api/v1/users/buffer": "/api/v1/users/buffer",
-        "/api/v1/users/event": "/api/v1/users/event",
-    }
+PATH_MAPPINGS = [
+    "/api/v1/users/blobs",
+    "/api/v1/users/profile",
+    "/api/v1/users/buffer",
+    "/api/v1/users/event",
+    "/api/v1/users/context",
+    "/api/v1/users",
+    "/api/v1/blobs/insert",
+    "/api/v1/blobs",
+]
 
+
+class AuthMiddleware(BaseHTTPMiddleware):
     def normalize_path(self, path: str) -> str:
         """Remove dynamic path parameters to get normalized path for metrics"""
-        if not path.startswith("/api/v1"):
+        if not path.startswith("/api"):
             return path
 
-        for prefix, normalized in self.PATH_MAPPINGS.items():
+        for prefix in PATH_MAPPINGS:
             if path.startswith(prefix):
-                return normalized
+                return prefix
 
         return path
 
@@ -384,7 +436,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         if request.url.path.startswith("/api/v1/healthcheck"):
             telemetry_manager.increment_counter_metric(
-                CounterMetricName.HEALTHCHECK, 1, {"source_ip": request.client.host}
+                CounterMetricName.HEALTHCHECK, 1, 
             )
             return await call_next(request)
 
@@ -421,7 +473,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
             1,
             {
                 "project_id": request.state.memobase_project_id,
-                "source_ip": request.client.host,
                 "path": normalized_path,
                 "method": request.method,
             },
@@ -435,7 +486,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
             (time.time() - start_time) * 1000,
             {
                 "project_id": request.state.memobase_project_id,
-                "source_ip": request.client.host,
                 "path": normalized_path,
                 "method": request.method,
             },
