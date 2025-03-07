@@ -138,6 +138,7 @@ async def get_user(
     request: Request,
     user_id: str = Path(..., description="The ID of the user to retrieve"),
 ) -> res.UserDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.user.get_user(user_id, project_id)
     return p.to_response(res.UserDataResponse)
@@ -149,6 +150,7 @@ async def update_user(
     user_id: str = Path(..., description="The ID of the user to update"),
     user_data: dict = Body(..., description="Updated user data"),
 ) -> res.IdResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.user.update_user(user_id, project_id, user_data)
     return p.to_response(res.IdResponse)
@@ -159,6 +161,7 @@ async def delete_user(
     request: Request,
     user_id: str = Path(..., description="The ID of the user to delete"),
 ) -> BaseResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.user.delete_user(user_id, project_id)
     return p.to_response(BaseResponse)
@@ -172,6 +175,7 @@ async def get_user_all_blobs(
     page: int = Query(0, description="Page number for pagination, starting from 0"),
     page_size: int = Query(10, description="Number of items per page, default is 10"),
 ) -> res.IdsResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.user.get_user_all_blobs(
         user_id, project_id, blob_type, page, page_size
@@ -186,6 +190,7 @@ async def insert_blob(
     blob_data: res.BlobData = Body(..., description="The blob data to insert"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> res.IdResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     background_tasks.add_task(
         capture_int_key, TelemetryKeyName.insert_blob_request, project_id=project_id
@@ -247,6 +252,7 @@ async def get_blob(
     user_id: str = Path(..., description="The ID of the user"),
     blob_id: str = Path(..., description="The ID of the blob to retrieve"),
 ) -> res.BlobDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.blob.get_blob(user_id, project_id, blob_id)
     return p.to_response(res.BlobDataResponse)
@@ -258,6 +264,7 @@ async def delete_blob(
     user_id: str = Path(..., description="The ID of the user"),
     blob_id: str = Path(..., description="The ID of the blob to delete"),
 ) -> res.BaseResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.blob.remove_blob(user_id, project_id, blob_id)
     return p.to_response(res.BaseResponse)
@@ -291,6 +298,7 @@ async def get_user_profile(
         description='Set specific subtopic limits for topics in JSON, for example {"topic1": 3, "topic2": 5}. The limits in this param will override `max_subtopic_size`.',
     ),
 ) -> res.UserProfileResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     """Get the real-time user profiles for long term memory"""
     project_id = request.state.memobase_project_id
     topic_limits_json = topic_limits_json or "{}"
@@ -320,6 +328,7 @@ async def flush_buffer(
     buffer_type: BlobType = Path(..., description="The type of buffer to flush"),
 ) -> res.BaseResponse:
     """Get the real-time user profiles for long term memory"""
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.buffer.wait_insert_done_then_flush(
         user_id, project_id, buffer_type
@@ -333,6 +342,7 @@ async def delete_user_profile(
     user_id: str = Path(..., description="The ID of the user"),
     profile_id: str = Path(..., description="The ID of the profile to delete"),
 ) -> res.BaseResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     """Get the real-time user profiles for long term memory"""
     project_id = request.state.memobase_project_id
     p = await controllers.profile.delete_user_profile(user_id, project_id, profile_id)
@@ -349,6 +359,7 @@ async def get_user_events(
         description="Max token size of returned events",
     ),
 ) -> res.UserEventsDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.event.get_user_events(
         user_id, project_id, topk=topk, max_token_size=max_token_size
@@ -385,6 +396,7 @@ async def get_user_context(
         description="Profile event ratio of returned Context",
     ),
 ) -> res.UserContextDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     topic_limits_json = topic_limits_json or "{}"
     try:
