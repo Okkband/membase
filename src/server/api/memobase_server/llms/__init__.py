@@ -2,16 +2,13 @@ import time
 from ..prompts.utils import convert_response_to_json
 from ..utils import get_encoded_tokens
 from ..env import CONFIG, LOG, TelemetryKeyName
+from ..controllers.billing import project_cost_token_billing
 from ..models.utils import Promise
 from ..models.response import CODE
 from .openai import openai_complete
 from .doubao_cache import doubao_cache_complete
 from ..telemetry.capture_key import capture_int_key
-from ..telemetry import (
-    telemetry_manager, 
-    CounterMetricName, 
-    HistogramMetricName
-)
+from ..telemetry import telemetry_manager, CounterMetricName, HistogramMetricName
 
 
 FACTORIES = {"openai": openai_complete, "doubao_cache": doubao_cache_complete}
@@ -25,14 +22,16 @@ async def llm_complete(
     system_prompt=None,
     history_messages=[],
     json_mode=False,
+    model=None,
     **kwargs,
 ) -> Promise[str | dict]:
+    use_model = model or CONFIG.best_llm_model
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
     try:
         start_time = time.time()
         results = await FACTORIES[CONFIG.llm_style](
-            CONFIG.best_llm_model,
+            use_model,
             prompt,
             system_prompt=system_prompt,
             history_messages=history_messages,
@@ -50,12 +49,7 @@ async def llm_complete(
     )
     out_tokens = len(get_encoded_tokens(results))
 
-    await capture_int_key(
-        TelemetryKeyName.llm_input_tokens, in_tokens, project_id=project_id
-    )
-    await capture_int_key(
-        TelemetryKeyName.llm_output_tokens, out_tokens, project_id=project_id
-    )
+    await project_cost_token_billing(project_id, in_tokens, out_tokens)
 
     telemetry_manager.increment_counter_metric(
         CounterMetricName.LLM_TOKENS_INPUT,

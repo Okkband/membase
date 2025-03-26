@@ -74,11 +74,12 @@ class ProfileDelta(BaseModel):
 
 class EventData(BaseModel):
     profile_delta: list[ProfileDelta] = Field(..., description="List of profile data")
+    event_tip: Optional[str] = Field(None, description="Event tip")
 
 
 class UserEventData(BaseModel):
     id: UUID = Field(..., description="The event's unique identifier")
-    event_data: Optional[EventData] = Field(None, description="User event data in JSON")
+    event_data: EventData = Field(None, description="User event data in JSON")
     created_at: datetime = Field(
         None, description="Timestamp when the event was created"
     )
@@ -121,6 +122,15 @@ class QueryData(BaseModel):
 
 class ProfileConfigData(BaseModel):
     profile_config: str = Field(..., description="Profile config string")
+
+
+class BillingData(BaseModel):
+    token_left: Optional[int] = Field(None, description="Total token left")
+
+    next_refill_at: Optional[datetime] = Field(None, description="Next refill time")
+    project_token_cost_month: int = Field(
+        ..., description="Token cost of this project for this month"
+    )
 
 
 # API response format
@@ -175,4 +185,10 @@ class UserEventsDataResponse(BaseResponse):
 class UserContextDataResponse(BaseResponse):
     data: Optional[ContextData] = Field(
         None, description="Response containing user context"
+    )
+
+
+class BillingResponse(BaseResponse):
+    data: Optional[BillingData] = Field(
+        None, description="Response containing token left"
     )
