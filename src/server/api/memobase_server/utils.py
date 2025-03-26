@@ -1,4 +1,5 @@
 import yaml
+import uuid
 from typing import cast
 from datetime import timezone, datetime
 from functools import wraps
@@ -130,3 +131,12 @@ def is_valid_profile_config(profile_config: str) -> bool:
     except yaml.YAMLError as e:
         LOG.error(f"Invalid profile config: {e}")
         return False
+def is_valid_uuid(uuid_string: str) -> bool:
+    try:
+        return str(uuid.UUID(uuid_string)) == uuid_string
+    except ValueError:
+        return False
+def generate_uuidv5_from_number(uuid_string: str, namespace=uuid.UUID("12345678-1234-5678-1234-567812345678")):
+    if is_valid_uuid(uuid_string):
+        return uuid_string
+    return uuid.uuid5(namespace, uuid_string)
