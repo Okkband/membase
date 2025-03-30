@@ -1,4 +1,5 @@
 from .. import controllers
+from .. import utils
 
 from ..models.response import BaseResponse
 from ..models.blob import BlobType
@@ -23,6 +24,7 @@ async def get_user(
     request: Request,
     user_id: str = Path(..., description="The ID of the user to retrieve"),
 ) -> res.UserDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.user.get_user(user_id, project_id)
     return p.to_response(res.UserDataResponse)
@@ -33,6 +35,7 @@ async def update_user(
     user_id: str = Path(..., description="The ID of the user to update"),
     user_data: dict = Body(..., description="Updated user data"),
 ) -> res.IdResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.user.update_user(user_id, project_id, user_data)
     return p.to_response(res.IdResponse)
@@ -42,6 +45,7 @@ async def delete_user(
     request: Request,
     user_id: str = Path(..., description="The ID of the user to delete"),
 ) -> BaseResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.user.delete_user(user_id, project_id)
     return p.to_response(BaseResponse)
@@ -54,6 +58,7 @@ async def get_user_all_blobs(
     page: int = Query(0, description="Page number for pagination, starting from 0"),
     page_size: int = Query(10, description="Number of items per page, default is 10"),
 ) -> res.IdsResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.user.get_user_all_blobs(
         user_id, project_id, blob_type, page, page_size

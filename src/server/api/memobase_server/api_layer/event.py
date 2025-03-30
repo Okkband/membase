@@ -1,4 +1,5 @@
 from .. import controllers
+from .. import utils
 from ..models import response as res
 from fastapi import Request
 from fastapi import Path, Query
@@ -13,6 +14,7 @@ async def get_user_events(
         description="Max token size of returned events",
     ),
 ) -> res.UserEventsDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.event.get_user_events(
         user_id, project_id, topk=topk, max_token_size=max_token_size

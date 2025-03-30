@@ -2,6 +2,7 @@ import json
 
 from .. import controllers
 
+from .. import utils
 from ..models.response import CODE
 from ..models.utils import Promise
 from ..models import response as res
@@ -37,6 +38,7 @@ async def get_user_context(
         description="Profile event ratio of returned Context",
     ),
 ) -> res.UserContextDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     topic_limits_json = topic_limits_json or "{}"
     try:

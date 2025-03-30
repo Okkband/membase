@@ -3,6 +3,7 @@ from fastapi import Path, Body
 import traceback
 
 from .. import controllers
+from .. import utils
 
 from ..env import LOG, TelemetryKeyName
 from ..models.response import CODE
@@ -17,7 +18,12 @@ async def insert_blob(
     blob_data: res.BlobData = Body(..., description="The blob data to insert"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> res.IdResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
+    result = await controllers.user.get_user(user_id, project_id)
+    if result._Promise__errcode == CODE.NOT_FOUND:
+        LOG.info(f"User {user_id} not found")
+        p = await controllers.user.create_user(res.UserData(id=user_id), project_id)
     background_tasks.add_task(
         capture_int_key, TelemetryKeyName.insert_blob_request, project_id=project_id
     )
@@ -67,6 +73,7 @@ async def get_blob(
     user_id: str = Path(..., description="The ID of the user"),
     blob_id: str = Path(..., description="The ID of the blob to retrieve"),
 ) -> res.BlobDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.blob.get_blob(user_id, project_id, blob_id)
     return p.to_response(res.BlobDataResponse)
@@ -77,6 +84,7 @@ async def delete_blob(
     user_id: str = Path(..., description="The ID of the user"),
     blob_id: str = Path(..., description="The ID of the blob to delete"),
 ) -> res.BaseResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.blob.remove_blob(user_id, project_id, blob_id)
     return p.to_response(res.BaseResponse)
