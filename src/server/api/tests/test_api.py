@@ -1,11 +1,14 @@
 import os
 import pytest
+import numpy as np
 from unittest.mock import patch, Mock, AsyncMock
 from api import app
 from fastapi.testclient import TestClient
 from memobase_server import controllers
 from memobase_server.models.database import DEFAULT_PROJECT_ID
 from memobase_server.models.blob import BlobType
+import numpy as np
+from memobase_server.env import CONFIG
 
 PREFIX = "/api/v1"
 TOKEN = os.getenv("ACCESS_TOKEN")
@@ -45,16 +48,56 @@ def mock_llm_complete():
 
 
 @pytest.fixture
+def mock_llm_validate_complete():
+    with patch("memobase_server.controllers.modal.chat.merge.llm_complete") as mock_llm:
+        mock_client1 = AsyncMock()
+        mock_client1.ok = Mock(return_value=True)
+        mock_client1.data = Mock(return_value="- UPDATE::Gus")
+
+        mock_llm.side_effect = [mock_client1]
+        yield mock_llm
+
+
+@pytest.fixture
 def mock_event_summary_llm_complete():
     with patch(
         "memobase_server.controllers.modal.chat.event_summary.llm_complete"
     ) as mock_llm:
-        mock_client1 = AsyncMock()
-        mock_client1.ok = Mock(return_value=True)
-        mock_client1.data = Mock(return_value="Melinda is a software engineer")
 
-        mock_llm.side_effect = [mock_client1]
+        mock_client2 = AsyncMock()
+        mock_client2.ok = Mock(return_value=True)
+        mock_client2.data = Mock(return_value="- emotion::happy")
+
+        mock_llm.side_effect = [mock_client2]
         yield mock_llm
+
+
+@pytest.fixture
+def mock_entry_summary_llm_complete():
+    with patch(
+        "memobase_server.controllers.modal.chat.entry_summary.llm_complete"
+    ) as mock_llm:
+
+        mock_client2 = AsyncMock()
+        mock_client2.ok = Mock(return_value=True)
+        mock_client2.data = Mock(return_value="Melina is a happy girl")
+
+        mock_llm.side_effect = [mock_client2]
+        yield mock_llm
+
+
+@pytest.fixture
+def mock_event_get_embedding():
+    with patch(
+        "memobase_server.controllers.event.get_embedding"
+    ) as mock_event_get_embedding:
+        async_mock = AsyncMock()
+        async_mock.ok = Mock(return_value=True)
+        async_mock.data = Mock(
+            return_value=np.array([[0.1 for _ in range(CONFIG.embedding_dim)]])
+        )
+        mock_event_get_embedding.return_value = async_mock
+        yield mock_event_get_embedding
 
 
 def test_user_api_curd(client, db_env):
@@ -180,43 +223,6 @@ def test_blob_api_curd(client, db_env):
 
 
 @pytest.mark.asyncio
-async def test_api_project(client, db_env):
-    response = client.get(f"{PREFIX}/project/profile_config")
-    d = response.json()
-    print(d)
-    assert response.status_code == 200
-    assert d["errno"] == 0
-    before_config = d["data"]["profile_config"]
-
-    response = client.post(
-        f"{PREFIX}/project/profile_config", json={"profile_config": "a: 1"}
-    )
-    d = response.json()
-    print(d)
-
-    response = client.get(f"{PREFIX}/project/profile_config")
-    d = response.json()
-    print(d)
-    assert d["data"]["profile_config"] == "a: 1"
-
-    response = client.post(
-        f"{PREFIX}/project/profile_config", json={"profile_config": before_config}
-    )
-    d = response.json()
-
-    response = client.get(f"{PREFIX}/project/profile_config")
-    d = response.json()
-    print(d)
-
-    response = client.post(
-        f"{PREFIX}/project/profile_config", json={"profile_config": "a: ["}
-    )
-    d = response.json()
-    print(d)
-    assert d["errno"] != 0
-
-
-@pytest.mark.asyncio
 async def test_api_user_profile(client, db_env):
     response = client.post(f"{PREFIX}/users", json={"data": {"test": 1}})
     d = response.json()
@@ -263,6 +269,7 @@ async def test_api_user_profile(client, db_env):
     assert d["data"]["profiles"][0]["id"] == id2
 
     response = client.get(f"{PREFIX}/users/context/{u_id}?only_topics=interest")
+    print(response.json())
     d = response.json()
     assert response.status_code == 200
     assert d["errno"] == 0
@@ -295,7 +302,13 @@ async def test_api_user_profile(client, db_env):
 
 @pytest.mark.asyncio
 async def test_api_user_flush_buffer(
-    client, db_env, mock_llm_complete, mock_event_summary_llm_complete
+    client,
+    db_env,
+    mock_llm_complete,
+    mock_llm_validate_complete,
+    mock_event_summary_llm_complete,
+    mock_entry_summary_llm_complete,
+    mock_event_get_embedding,
 ):
     response = client.post(f"{PREFIX}/users", json={"data": {"test": 1}})
     d = response.json()
@@ -397,6 +410,181 @@ def test_chat_blob_param_api(client, db_env):
     assert response.status_code == 200
     assert d["errno"] == 0
     b_id = d["data"]["id"]
+
+    response = client.delete(f"{PREFIX}/users/{u_id}")
+    d = response.json()
+    assert response.status_code == 200
+    assert d["errno"] == 0
+
+
+@pytest.mark.asyncio
+async def test_api_user_event(
+    client,
+    db_env,
+    mock_llm_complete,
+    mock_llm_validate_complete,
+    mock_event_summary_llm_complete,
+    mock_entry_summary_llm_complete,
+    mock_event_get_embedding,
+):
+    response = client.post(f"{PREFIX}/users", json={"data": {"test": 1}})
+    d = response.json()
+    assert response.status_code == 200
+    assert d["errno"] == 0
+    u_id = d["data"]["id"]
+
+    response = client.post(
+        f"{PREFIX}/blobs/insert/{u_id}",
+        json={
+            "blob_type": "chat",
+            "blob_data": {
+                "messages": [
+                    {"role": "user", "content": "hello, I'm Gus"},
+                    {"role": "assistant", "content": "hi"},
+                ]
+            },
+        },
+    )
+    d = response.json()
+    assert response.status_code == 200
+    assert d["errno"] == 0
+
+    response = client.post(f"{PREFIX}/users/buffer/{u_id}/chat")
+    assert response.status_code == 200
+    assert response.json()["errno"] == 0
+
+    response = client.get(f"{PREFIX}/users/event/{u_id}?topk=5")
+    d = response.json()
+    assert response.status_code == 200
+    assert d["errno"] == 0
+    assert len(d["data"]["events"]) == 1
+
+    print(d["data"]["events"])
+    assert d["data"]["events"][0]["event_data"]["event_tip"] == "Melina is a happy girl"
+    assert d["data"]["events"][0]["event_data"]["event_tags"] == [
+        {"tag": "emotion", "value": "happy"}
+    ]
+    print(d)
+
+    response = client.delete(f"{PREFIX}/users/{u_id}")
+    d = response.json()
+    assert response.status_code == 200
+    assert d["errno"] == 0
+
+
+@pytest.mark.asyncio
+async def test_api_project_invalid_profile_config(client, db_env):
+    response = client.post(
+        f"{PREFIX}/project/profile_config",
+        json={"profile_config": ""},
+    )
+
+    response = client.get(f"{PREFIX}/project/profile_config")
+    d = response.json()
+    print(d)
+    assert response.status_code == 200
+    assert d["errno"] == 0
+    assert d["data"]["profile_config"] == ""
+
+    response = client.post(
+        f"{PREFIX}/project/profile_config",
+        json={
+            "profile_config": """
+overwrite_user_profiles:
+  - topic: "Food"
+    sub_topics:
+      - name: "Dietary Preference"
+        description: "xxxxxxxx"
+      - name: "Dietary Restriction"
+        description: "yyyyyyyy"
+"""
+        },
+    )
+    d = response.json()
+    assert d["errno"] == 0
+
+    response = client.post(
+        f"{PREFIX}/project/profile_config",
+        json={
+            "profile_config": """
+
+overwrite_user_profiles:
+  - topic: "Food"
+    sub_topics:
+      - name: "Dietary Preference"
+        description: true
+      - name: "Dietary Restriction"
+        description: "yyyyyyyy"
+"""
+        },
+    )
+    d = response.json()
+    assert d["errno"] != 0
+    print(d["errmsg"])
+
+    response = client.post(
+        f"{PREFIX}/project/profile_config",
+        json={
+            "profile_config": """
+[[[
+"""
+        },
+    )
+    d = response.json()
+    assert d["errno"] != 0
+    print(d["errmsg"])
+
+    response = client.post(
+        f"{PREFIX}/project/profile_config",
+        json={"profile_config": ""},
+    )
+    d = response.json()
+    assert d["errno"] == 0
+
+
+@pytest.mark.asyncio
+async def test_api_event_search(
+    client,
+    db_env,
+    mock_llm_complete,
+    mock_llm_validate_complete,
+    mock_event_summary_llm_complete,
+    mock_entry_summary_llm_complete,
+    mock_event_get_embedding,
+):
+    response = client.post(f"{PREFIX}/users", json={})
+    d = response.json()
+    assert response.status_code == 200
+    assert d["errno"] == 0
+    u_id = d["data"]["id"]
+
+    response = client.post(
+        f"{PREFIX}/blobs/insert/{u_id}",
+        json={
+            "blob_type": "chat",
+            "blob_data": {
+                "messages": [
+                    {"role": "user", "content": "hello, I'm Gus"},
+                    {"role": "assistant", "content": "hi"},
+                ]
+            },
+        },
+    )
+    d = response.json()
+    assert response.status_code == 200
+    assert d["errno"] == 0
+
+    response = client.post(f"{PREFIX}/users/buffer/{u_id}/chat")
+    assert response.status_code == 200
+    assert response.json()["errno"] == 0
+
+    response = client.get(f"{PREFIX}/users/event/search/{u_id}?query=hello")
+    d = response.json()
+    assert response.status_code == 200
+    assert d["errno"] == 0
+    assert len(d["data"]["events"]) == 1
+    assert np.allclose(d["data"]["events"][0]["similarity"], 1)
+    print(d["data"])
 
     response = client.delete(f"{PREFIX}/users/{u_id}")
     d = response.json()

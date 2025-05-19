@@ -1,6 +1,6 @@
 import json
 
-from .. import controllers
+from ..controllers import full as controllers
 
 from .. import utils
 from ..models.response import CODE
@@ -37,16 +37,30 @@ async def get_user_context(
         0.6,
         description="Profile event ratio of returned Context",
     ),
+    require_event_summary: bool = Query(
+        False,
+        description="Whether to require event summary in returned Context",
+    ),
+    chats_str: str = Query(
+        None,
+        description='List of chats in OpenAI Message format, for example: [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}]',
+    ),
+    event_similarity_threshold: float = Query(
+        0.2,
+        description="Event similarity threshold of returned Context",
+    ),
 ) -> res.UserContextDataResponse:
     user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     topic_limits_json = topic_limits_json or "{}"
+    chats_str = chats_str or "[]"
     try:
         topic_limits = res.StrIntData(data=json.loads(topic_limits_json)).data
+        chats = res.MessageData(data=json.loads(chats_str)).data
     except Exception as e:
-        return Promise.reject(
-            CODE.BAD_REQUEST, f"Invalid topic_limits JSON: {e}"
-        ).to_response(res.UserContextDataResponse)
+        return Promise.reject(CODE.BAD_REQUEST, f"Invalid JSON: {e}").to_response(
+            res.UserContextDataResponse
+        )
     p = await controllers.context.get_user_context(
         user_id,
         project_id,
@@ -56,5 +70,8 @@ async def get_user_context(
         max_subtopic_size,
         topic_limits,
         profile_event_ratio,
+        require_event_summary,
+        chats,
+        event_similarity_threshold,
     )
     return p.to_response(res.UserContextDataResponse)

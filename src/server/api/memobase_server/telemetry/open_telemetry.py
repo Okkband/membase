@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Dict
-
+import os
+import socket
 from prometheus_client import start_http_server
 from opentelemetry import metrics
 from opentelemetry.exporter.prometheus import PrometheusMetricReader
@@ -11,7 +12,20 @@ from opentelemetry.sdk.metrics._internal.instrument import (
     Gauge,
 )
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource, DEPLOYMENT_ENVIRONMENT
+from functools import wraps
 from ..env import LOG, CONFIG
+
+
+def no_raise_exception(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            LOG.error(f"Error in {func.__name__}: {e}")
+
+    return wrapper
+
 
 class CounterMetricName(Enum):
     """Enum for all available metrics."""
@@ -21,6 +35,7 @@ class CounterMetricName(Enum):
     LLM_INVOCATIONS = "llm_invocations_total"
     LLM_TOKENS_INPUT = "llm_input_tokens_total"
     LLM_TOKENS_OUTPUT = "llm_output_tokens_total"
+    EMBEDDING_TOKENS = "embedding_tokens_total"
 
     def get_description(self) -> str:
         """Get the description for this metric."""
@@ -30,6 +45,7 @@ class CounterMetricName(Enum):
             CounterMetricName.LLM_INVOCATIONS: "Total number of LLM invocations",
             CounterMetricName.LLM_TOKENS_INPUT: "Total number of input tokens",
             CounterMetricName.LLM_TOKENS_OUTPUT: "Total number of output tokens",
+            CounterMetricName.EMBEDDING_TOKENS: "Total number of embedding tokens",
         }
         return descriptions[self]
 
@@ -42,12 +58,14 @@ class HistogramMetricName(Enum):
     """Enum for histogram metrics."""
 
     LLM_LATENCY_MS = "llm_latency"
+    EMBEDDING_LATENCY_MS = "embedding_latency"
     REQUEST_LATENCY_MS = "request_latency"
 
     def get_description(self) -> str:
         """Get the description for this metric."""
         descriptions = {
             HistogramMetricName.LLM_LATENCY_MS: "Latency of the LLM in milliseconds",
+            HistogramMetricName.EMBEDDING_LATENCY_MS: "Latency of the embedding in milliseconds",
             HistogramMetricName.REQUEST_LATENCY_MS: "Latency of the request in milliseconds",
         }
         return descriptions[self]
@@ -80,7 +98,10 @@ class TelemetryManager:
     """Manages telemetry setup and metrics for the memobase server."""
 
     def __init__(
-        self, service_name: str = "memobase-server", prometheus_port: int = 9464, deployment_environment: str = "default"
+        self,
+        service_name: str = "memobase-server",
+        prometheus_port: int = 9464,
+        deployment_environment: str = "default",
     ):
         self._service_name = service_name
         self._prometheus_port = prometheus_port
@@ -93,10 +114,12 @@ class TelemetryManager:
 
     def setup_telemetry(self) -> None:
         """Initialize OpenTelemetry with Prometheus exporter."""
-        resource = Resource(attributes={
-            SERVICE_NAME: self._service_name,
-            DEPLOYMENT_ENVIRONMENT: self._deployment_environment,
-            })
+        resource = Resource(
+            attributes={
+                SERVICE_NAME: self._service_name,
+                DEPLOYMENT_ENVIRONMENT: self._deployment_environment,
+            }
+        )
         reader = PrometheusMetricReader()
         provider = MeterProvider(resource=resource, metric_readers=[reader])
         metrics.set_meter_provider(provider)
@@ -114,10 +137,20 @@ class TelemetryManager:
 
         # Initialize meter
         self._meter = metrics.get_meter(self._service_name)
-    
+
     def _construct_attributes(self, **kwargs) -> Dict[str, str]:
+
+        if os.environ.get("POD_IP"):
+            # use k8s downward API to get the pod ip
+            pod_ip = os.environ.get("POD_IP")
+        else:
+            # use the hostname to get the ip address
+            hostname = socket.gethostname()
+            pod_ip = socket.gethostbyname(hostname)
+
         return {
             DEPLOYMENT_ENVIRONMENT: self._deployment_environment,
+            "memobase_server_ip": pod_ip,
             **kwargs,
         }
 
@@ -153,6 +186,7 @@ class TelemetryManager:
                 description=metric.get_description(),
             )
 
+    @no_raise_exception
     def increment_counter_metric(
         self,
         metric: CounterMetricName,
@@ -164,6 +198,7 @@ class TelemetryManager:
         complete_attributes = self._construct_attributes(**(attributes or {}))
         self._metrics[metric].add(value, complete_attributes)
 
+    @no_raise_exception
     def record_histogram_metric(
         self,
         metric: HistogramMetricName,
@@ -175,6 +210,7 @@ class TelemetryManager:
         complete_attributes = self._construct_attributes(**(attributes or {}))
         self._metrics[metric].record(value, complete_attributes)
 
+    @no_raise_exception
     def set_gauge_metric(
         self,
         metric: GaugeMetricName,
@@ -193,6 +229,8 @@ class TelemetryManager:
 
 
 # Create a global instance
-telemetry_manager = TelemetryManager(deployment_environment=CONFIG.telemetry_deployment_environment)
+telemetry_manager = TelemetryManager(
+    deployment_environment=CONFIG.telemetry_deployment_environment
+)
 telemetry_manager.setup_telemetry()
 telemetry_manager.setup_metrics()

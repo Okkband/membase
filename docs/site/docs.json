@@ -28,11 +28,21 @@
               {
                 "group": "User Profile",
                 "pages": [
-                  "features/profile",
-                  "features/profile_desc"
+                  "features/profile/profile",
+                  "features/profile/profile_desc",
+                  "features/profile/profile_config",
+                  "features/profile/profile_filter"
                 ]
               },
-              "features/event",
+              {
+                "group": "User Event",
+                "pages": [
+                  "features/event/event",
+                  "features/event/event_tag",
+                  "features/event/event_search"
+                ]
+              },
+              "features/message",
               "features/context"
             ]
           },
@@ -53,18 +63,35 @@
         ]
       },
       {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Templates",
+            "icon": "lightbulb",
+            "pages": [
+              "templates/livekit",
+              "templates/ollama",
+              "templates/openai",
+              "templates/dify"
+            ]
+          }
+        ]
+      },
+      {
         "tab": "API Reference",
         "groups": [
           {
             "group": "API Reference",
+            "icon": "plug",
             "pages": [
               "api-reference/overview",
               {
-                "group": "Project Config",
+                "group": "Project",
                 "pages": [
                   "api-reference/project/get_profile_config",
                   "api-reference/project/update_profile_config",
-                  "api-reference/utility/healthcheck"
+                  "api-reference/utility/healthcheck",
+                  "api-reference/utility/usage"
                 ]
               },
               {
@@ -104,7 +131,10 @@
               {
                 "group": "User Events",
                 "pages": [
-                  "api-reference/events/get_events"
+                  "api-reference/events/get_events",
+                  "api-reference/events/search_events",
+                  "api-reference/events/update_event",
+                  "api-reference/events/delete_event"
                 ]
               },
               {
@@ -121,6 +151,11 @@
     "global": {
       "anchors": [
         {
+          "anchor": "Playground",
+          "href": "https://app.memobase.io/playground",
+          "icon": "play"
+        },
+        {
           "anchor": "Open Source",
           "href": "https://github.com/memodb-io/memobase",
           "icon": "github"
@@ -129,6 +164,11 @@
           "anchor": "Community",
           "href": "https://discord.gg/YdgwU4d9NB",
           "icon": "discord"
+        },
+        {
+          "anchor": "Support",
+          "href": "mailto:contact@memobase.io",
+          "icon": "envelope"
         }
       ]
     }
@@ -171,5 +211,8 @@
     "gtm": {
       "tagId": "GTM-PDC577XR"
     }
+  },
+  "seo": {
+    "indexing": "all"
   }
 }

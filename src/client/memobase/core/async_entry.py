@@ -3,9 +3,9 @@ import json
 import httpx
 from collections import defaultdict
 from typing import Optional
-from pydantic import HttpUrl
+from pydantic import HttpUrl, ValidationError
 from dataclasses import dataclass
-from .blob import BlobData, Blob, BlobType, ChatBlob
+from .blob import BlobData, Blob, BlobType, ChatBlob, OpenAICompatibleMessage
 from .user import UserProfile, UserProfileData, UserEventData
 from ..network import unpack_response
 from ..error import ServerError
@@ -59,6 +59,10 @@ class AsyncMemoBaseClient:
             LOG.error(f"Healthcheck failed: {e}")
             return False
         return True
+
+    async def get_usage(self) -> dict:
+        r = unpack_response(await self._client.get("/project/billing"))
+        return r.data
 
     async def get_config(self) -> str:
         r = unpack_response(await self._client.get("/project/profile_config"))
@@ -179,6 +183,7 @@ class AsyncUser:
         only_topics: list[str] = None,
         max_subtopic_size: int = None,
         topic_limits: dict[str, int] = None,
+        chats: list[OpenAICompatibleMessage] = None,
         need_json: bool = False,
     ) -> list[UserProfile]:
         params = f"?max_token_size={max_token_size}"
@@ -192,6 +197,14 @@ class AsyncUser:
             params += f"&max_subtopic_size={max_subtopic_size}"
         if topic_limits:
             params += f"&topic_limits_json={json.dumps(topic_limits)}"
+        if chats:
+            for c in chats:
+                try:
+                    OpenAICompatibleMessage(**c)
+                except ValidationError as e:
+                    raise ValueError(f"Invalid chat message: {e}")
+            chats_query = f"&chats_str={json.dumps(chats)}"
+            params += chats_query
         r = unpack_response(
             await self.project_client.client.get(
                 f"/users/profile/{self.user_id}{params}"
@@ -225,10 +238,46 @@ class AsyncUser:
         )
         return True
 
-    async def event(self, topk=10) -> list[UserEventData]:
+    async def event(self, topk=10, max_token_size=None, need_summary=False) -> list[UserEventData]:
+        params = f"?topk={topk}"  
+        if max_token_size is not None:  
+            params += f"&max_token_size={max_token_size}"  
+        if need_summary:  
+            params += f"&need_summary=true"
         r = unpack_response(
             await self.project_client.client.get(
-                f"/users/event/{self.user_id}?topk={topk}"
+                f"/users/event/{self.user_id}{params}"
+            )
+        )
+        return [UserEventData.model_validate(e) for e in r.data["events"]]
+
+    async def delete_event(self, event_id: str) -> bool:
+        r = unpack_response(
+            await self.project_client.client.delete(
+                f"/users/event/{self.user_id}/{event_id}"
+            )
+        )
+        return True
+
+    async def update_event(self, event_id: str, event_data: dict) -> bool:
+        r = unpack_response(
+            await self.project_client.client.put(
+                f"/users/event/{self.user_id}/{event_id}", json=event_data
+            )
+        )
+        return True
+
+    async def search_event(
+        self,
+        query: str,
+        topk: int = 10,
+        similarity_threshold: float = 0.5,
+        time_range_in_days: int = 7,
+    ) -> list[UserEventData]:
+        params = f"?query={query}&topk={topk}&similarity_threshold={similarity_threshold}&time_range_in_days={time_range_in_days}"
+        r = unpack_response(
+            await self.project_client.client.get(
+                f"/users/event/search/{self.user_id}{params}"
             )
         )
         return [UserEventData.model_validate(e) for e in r.data["events"]]
@@ -241,6 +290,9 @@ class AsyncUser:
         max_subtopic_size: int = None,
         topic_limits: dict[str, int] = None,
         profile_event_ratio: float = None,
+        require_event_summary: bool = None,
+        chats: list[OpenAICompatibleMessage] = None,
+        event_similarity_threshold: float = None,
     ) -> str:
         params = f"?max_token_size={max_token_size}"
         if prefer_topics:
@@ -255,6 +307,20 @@ class AsyncUser:
             params += f"&topic_limits_json={json.dumps(topic_limits)}"
         if profile_event_ratio:
             params += f"&profile_event_ratio={profile_event_ratio}"
+        if require_event_summary is not None:
+            params += (
+                f"&require_event_summary={'true' if require_event_summary else 'false'}"
+            )
+        if chats:
+            for c in chats:
+                try:
+                    OpenAICompatibleMessage(**c)
+                except ValidationError as e:
+                    raise ValueError(f"Invalid chat message: {e}")
+            chats_query = f"&chats_str={json.dumps(chats)}"
+            params += chats_query
+        if event_similarity_threshold:
+            params += f"&event_similarity_threshold={event_similarity_threshold}"
         r = unpack_response(
             await self.project_client.client.get(
                 f"/users/context/{self.user_id}{params}"

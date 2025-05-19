@@ -1,17 +1,22 @@
+import re
 import yaml
+import json
 import uuid
 from typing import cast
 from datetime import timezone, datetime
 from functools import wraps
-from .env import ENCODER, LOG, CONFIG
+from pydantic import ValidationError
+from .env import ENCODER, LOG, CONFIG, ProfileConfig
 from .models.blob import Blob, BlobType, ChatBlob, DocBlob, OpenAICompatibleMessage
 from .models.database import GeneralBlob
-from .models.response import UserEventData
+from .models.response import UserEventData, EventData
+from .models.utils import Promise, CODE
 from .connectors import get_redis_client, PROJECT_ID
+
+LIST_INT_REGEX = re.compile(r"\[\s*(?:\d+(?:\s*,\s*\d+)*\s*)?\]")
 
 
 def event_str_repr(event: UserEventData) -> str:
-    happened_at = event.created_at.astimezone(CONFIG.timezone).strftime("%Y/%m/%d")
     event_data = event.event_data
     if event_data.event_tip is None:
         profile_deltas = [
@@ -19,9 +24,58 @@ def event_str_repr(event: UserEventData) -> str:
             for ed in event_data.profile_delta
         ]
         profile_delta_str = "\n".join(profile_deltas)
-        return f"{happened_at}:\n{profile_delta_str}"
+        return profile_delta_str
     else:
-        return f"{happened_at}:\n{event_data.event_tip}"
+        if event_data.event_tags:
+            event_tags = "\n".join(
+                [f"- {tag.tag}: {tag.value}" for tag in event_data.event_tags]
+            )
+        else:
+            event_tags = ""
+        return f"{event_data.event_tip}\n{event_tags}"
+
+
+def event_embedding_str(event_data: EventData) -> str:
+    if event_data.profile_delta is None:
+        profile_delta_str = ""
+    else:
+        profile_deltas = [
+            f"- {ed.attributes['topic']}::{ed.attributes['sub_topic']}: {ed.content}"
+            for ed in event_data.profile_delta
+        ]
+        profile_delta_str = "\n".join(profile_deltas)
+
+    if event_data.event_tags is None:
+        event_tags = ""
+    else:
+        event_tags = "\n".join(
+            [f"- {tag.tag}: {tag.value}" for tag in event_data.event_tags]
+        )
+
+    if event_data.event_tip is None:
+        r = f"{profile_delta_str}\n{event_tags}"
+    else:
+        r = f"{event_data.event_tip}\n{profile_delta_str}\n{event_tags}"
+    return r
+
+
+def load_json_or_none(content: str) -> dict | None:
+    try:
+        return json.loads(content)
+    except Exception:
+        LOG.error(f"Invalid json: {content}")
+        return None
+
+
+def find_list_int_or_none(content: str) -> list[int] | None:
+    result = LIST_INT_REGEX.findall(content)
+    if not result:
+        return None
+    result = result[0]
+    ids = result.strip("[]").strip()
+    if not ids:
+        return []
+    return [int(i.strip()) for i in ids.split(",")]
 
 
 def get_encoded_tokens(content: str) -> list[int]:
@@ -32,8 +86,10 @@ def get_decoded_tokens(tokens: list[int]) -> str:
     return ENCODER.decode(tokens)
 
 
-def truncate_string(content: str, max_tokens: int):
-    return get_decoded_tokens(get_encoded_tokens(content)[:max_tokens])
+def truncate_string(content: str, max_tokens: int) -> str:
+    tokens = get_encoded_tokens(content)
+    tailing = "" if len(tokens) <= max_tokens else "..."
+    return get_decoded_tokens(tokens[:max_tokens]) + tailing
 
 
 def pack_blob_from_db(blob: GeneralBlob, blob_type: BlobType) -> Blob:
@@ -121,16 +177,19 @@ def user_id_lock(scope, lock_timeout=128, blocking_timeout=32):
     return __user_id_lock
 
 
-def is_valid_profile_config(profile_config: str) -> bool:
+def is_valid_profile_config(profile_config: str | None) -> Promise[None]:
+    if profile_config is None:
+        return Promise.resolve(None)
     # check if the profile config is valid yaml
     try:
-        r = yaml.safe_load(profile_config)
         if len(profile_config) > 65535:
-            return False
-        return True
+            return Promise.reject(CODE.BAD_REQUEST, "Profile config is too long")
+        ProfileConfig.load_config_string(profile_config)
+        return Promise.resolve(None)
     except yaml.YAMLError as e:
-        LOG.error(f"Invalid profile config: {e}")
-        return False
+        return Promise.reject(CODE.BAD_REQUEST, f"Invalid profile config: {e}")
+    except ValidationError as e:
+        return Promise.reject(CODE.BAD_REQUEST, f"Invalid profile config: {e}")
 def is_valid_uuid(uuid_string: str) -> bool:
     try:
         return str(uuid.UUID(uuid_string)) == uuid_string

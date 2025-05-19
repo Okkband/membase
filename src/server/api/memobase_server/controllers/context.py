@@ -1,11 +1,12 @@
 from ..models.utils import Promise
-from ..models.response import ContextData
+from ..models.response import ContextData, OpenAICompatibleMessage
 from ..prompts.chat_context_pack import CONTEXT_PROMPT_PACK
 from ..utils import get_encoded_tokens, event_str_repr
-from ..env import CONFIG
+from ..env import CONFIG, LOG
 from .project import get_project_profile_config
 from .profile import get_user_profiles, truncate_profiles
-from .event import get_user_events
+from .post_process.profile import filter_profiles_with_chats
+from .event import get_user_events, search_user_events, truncate_events
 
 
 async def get_user_context(
@@ -17,10 +18,14 @@ async def get_user_context(
     max_subtopic_size: int,
     topic_limits: dict[str, int],
     profile_event_ratio: float,
+    require_event_summary: bool,
+    chats: list[OpenAICompatibleMessage],
+    event_similarity_threshold: float,
 ) -> Promise[ContextData]:
     assert 0 < profile_event_ratio <= 1, "profile_event_ratio must be between 0 and 1"
     max_profile_token_size = int(max_token_size * profile_event_ratio)
-    max_event_token_size = max_token_size - max_profile_token_size
+    add_query_context = None
+    # max_event_token_size = max_token_size - max_profile_token_size
 
     p = await get_project_profile_config(project_id)
     if not p.ok():
@@ -32,8 +37,20 @@ async def get_user_context(
     p = await get_user_profiles(user_id, project_id)
     if not p.ok():
         return p
+    total_profiles = p.data()
     if max_profile_token_size > 0:
-        user_profiles = p.data()
+        if chats:
+            p = await filter_profiles_with_chats(
+                project_id,
+                total_profiles,
+                chats,
+                only_topics=only_topics,
+                # max_filter_num=topk,
+            )
+            if p.ok():
+                total_profiles.profiles = p.data()["profiles"]
+                add_query_context = p.data()
+        user_profiles = total_profiles
         use_profiles = await truncate_profiles(
             user_profiles,
             prefer_topics=prefer_topics,
@@ -56,23 +73,50 @@ async def get_user_context(
         profile_section = ""
 
     profile_section_tokens = len(get_encoded_tokens(profile_section))
-    max_event_token_size = min(
-        max_token_size - profile_section_tokens, max_event_token_size
-    )
+    max_event_token_size = max_token_size - profile_section_tokens
     if max_event_token_size <= 0:
         return Promise.resolve(
             ContextData(context=context_prompt_func(profile_section, ""))
         )
 
     # max 40 events, then truncate to max_event_token_size
-    p = await get_user_events(
-        user_id, project_id, topk=40, max_token_size=max_event_token_size
-    )
+    if chats and CONFIG.enable_event_embedding:
+        search_query = chats[-1].content
+        if add_query_context:
+            filter_profiles = add_query_context["profiles"]
+            profoile_q = "\n".join(
+                [
+                    f"- {fp.attributes['topic']}::{fp.attributes['sub_topic']}"
+                    for fp in filter_profiles
+                ]
+            )
+            search_query = f"{profoile_q}\n---\n{search_query}"
+        p = await search_user_events(
+            user_id,
+            project_id,
+            query=search_query,
+            topk=20,
+            similarity_threshold=event_similarity_threshold,
+        )
+    else:
+        p = await get_user_events(
+            user_id,
+            project_id,
+            topk=20,
+            need_summary=require_event_summary,
+        )
+    if not p.ok():
+        return p
+    user_events = p.data()
+    p = await truncate_events(user_events, max_event_token_size)
     if not p.ok():
         return p
     user_events = p.data()
     event_section = "\n---\n".join([event_str_repr(ed) for ed in user_events.events])
-
+    event_section_tokens = len(get_encoded_tokens(event_section))
+    LOG.info(
+        f"Retrived {len(use_profiles)} profiles({profile_section_tokens} tokens), {len(user_events.events)} events({event_section_tokens} tokens)"
+    )
     return Promise.resolve(
         ContextData(context=context_prompt_func(profile_section, event_section))
     )

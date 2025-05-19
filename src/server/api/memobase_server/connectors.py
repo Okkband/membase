@@ -7,15 +7,15 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError
 from uuid import uuid4
 from .env import LOG
-from .models.database import REG, Project
+from .models.database import REG, Project, UserEvent
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 REDIS_URL = os.getenv("REDIS_URL")
 PROJECT_ID = os.getenv("PROJECT_ID")
 
 if PROJECT_ID is None:
-    LOG.warning(f"PROJECT_ID is not set, use a random UUID")
-    PROJECT_ID = str(uuid4())
+    LOG.warning(f"PROJECT_ID is not set")
+    PROJECT_ID = "default"
 LOG.info(f"Project ID: {PROJECT_ID}")
 LOG.info(f"Database URL: {DATABASE_URL}")
 LOG.info(f"Redis URL: {REDIS_URL}")
@@ -34,10 +34,23 @@ REDIS_POOL = None
 Session = sessionmaker(bind=DB_ENGINE)
 
 
+def create_pgvector_extension():
+    try:
+        with Session() as session:
+            session.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            session.commit()
+            LOG.info("pgvector extension created or already exists")
+    except Exception as e:
+        LOG.error(f"Failed to create pgvector extension: {e}")
+
+
 def create_tables():
+    create_pgvector_extension()
+    
     REG.metadata.create_all(DB_ENGINE)
     with Session() as session:
         Project.initialize_root_project(session)
+        UserEvent.check_legal_embedding_dim(session)
     LOG.info("Database tables created successfully")
 
 

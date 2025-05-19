@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import IntEnum
 from typing import Optional
 from pydantic import BaseModel, UUID4, UUID5, Field
-from .blob import BlobData
+from .blob import BlobData, OpenAICompatibleMessage
 from .claim import ClaimData
 from .action import ActionData
 
@@ -28,6 +28,7 @@ class CODE(IntEnum):
     BAD_GATEWAY = 502  # The server, while acting as a gateway or proxy, received an invalid response from the upstream server.
     SERVICE_UNAVAILABLE = 503  # The server is currently unable to handle the request due to a temporary overloading or maintenance of the server.
     GATEWAY_TIMEOUT = 504  # The server, while acting as a gateway or proxy, did not receive a timely response from the upstream server.
+    SERVER_PARSE_ERROR = 520  # The server could not parse the request.
 
 
 class AIUserProfile(BaseModel):
@@ -47,6 +48,19 @@ class IdData(BaseModel):
 
 class IdsData(BaseModel):
     ids: list[UUID] = Field(..., description="List of UUID identifiers")
+
+
+class ChatModalResponse(BaseModel):
+    event_id: Optional[UUID] = Field(..., description="The event's unique identifier")
+    add_profiles: Optional[list[UUID]] = Field(
+        ..., description="List of added profiles' ids"
+    )
+    update_profiles: Optional[list[UUID]] = Field(
+        ..., description="List of updated profiles' ids"
+    )
+    delete_profiles: Optional[list[UUID]] = Field(
+        ..., description="List of deleted profiles' ids"
+    )
 
 
 class ProfileData(BaseModel):
@@ -72,9 +86,17 @@ class ProfileDelta(BaseModel):
     )
 
 
+class EventTag(BaseModel):
+    tag: str = Field(..., description="The event tag")
+    value: str = Field(..., description="The event tag value")
+
+
 class EventData(BaseModel):
-    profile_delta: list[ProfileDelta] = Field(..., description="List of profile data")
+    profile_delta: Optional[list[ProfileDelta]] = Field(
+        None, description="List of profile data"
+    )
     event_tip: Optional[str] = Field(None, description="Event tip")
+    event_tags: Optional[list[EventTag]] = Field(None, description="List of event tags")
 
 
 class UserEventData(BaseModel):
@@ -86,6 +108,7 @@ class UserEventData(BaseModel):
     updated_at: datetime = Field(
         None, description="Timestamp when the event was last updated"
     )
+    similarity: Optional[float] = Field(None, description="Similarity score")
 
 
 class ContextData(BaseModel):
@@ -115,13 +138,17 @@ class StrIntData(BaseModel):
     data: dict[str, int] = Field(..., description="String to int mapping")
 
 
+class MessageData(BaseModel):
+    data: list[OpenAICompatibleMessage] = Field(..., description="List of messages")
+
+
 class QueryData(BaseModel):
     claims: list[ClaimData] = Field(..., description="List of claim data")
     actions: list[ActionData] = Field(..., description="List of action data")
 
 
 class ProfileConfigData(BaseModel):
-    profile_config: str = Field(..., description="Profile config string")
+    profile_config: str | None = Field(..., description="Profile config string")
 
 
 class BillingData(BaseModel):
@@ -130,6 +157,12 @@ class BillingData(BaseModel):
     next_refill_at: Optional[datetime] = Field(None, description="Next refill time")
     project_token_cost_month: int = Field(
         ..., description="Token cost of this project for this month"
+    )
+
+
+class UserContextImport(BaseModel):
+    context: str = Field(
+        ..., description="The user context you want to import to Memobase"
     )
 
 
@@ -191,4 +224,22 @@ class UserContextDataResponse(BaseResponse):
 class BillingResponse(BaseResponse):
     data: Optional[BillingData] = Field(
         None, description="Response containing token left"
+    )
+
+
+class ChatModalAPIResponse(BaseResponse):
+    data: Optional[list[ChatModalResponse]] = Field(
+        None, description="Response containing chat modal data"
+    )
+
+
+class BlobInsertData(IdData):
+    chat_results: Optional[list[ChatModalResponse]] = Field(
+        None, description="List of chat modal data"
+    )
+
+
+class BlobInsertResponse(BaseResponse):
+    data: Optional[BlobInsertData] = Field(
+        None, description="Response containing blob insert data"
     )

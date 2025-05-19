@@ -6,7 +6,6 @@
   </a>
   <h1>Memobase</h1>
   <p>
-    <img src="https://img.shields.io/badge/python->=3.11-blue">
     <a href="https://pypi.org/project/memobase/">
       <img src="https://img.shields.io/pypi/v/memobase.svg">
     </a>
@@ -19,16 +18,31 @@
     <a href="https://pkg.go.dev/github.com/memodb-io/memobase/src/client/memobase-go">
       <img src="https://img.shields.io/badge/go-reference-blue?logo=go&logoColor=fff&style=flat&labelColor=2C2C2C&color=28CF8D" />
     </a>
-    <a href="https://github.com/memodb-io/memobase/actions/workflows/publish.yaml">
-      <img src="https://github.com/memodb-io/memobase/actions/workflows/publish.yaml/badge.svg">
+    <a href="./src/mcp">
+       <img src="https://img.shields.io/badge/MCP-Memobase-green">
     </a>
   </p>
   <p>
+    <a href="https://github.com/memodb-io/memobase/actions/workflows/publish.yaml">
+      <img src="https://github.com/memodb-io/memobase/actions/workflows/publish.yaml/badge.svg">
+    </a>
+        <a href="https://github.com/orgs/memodb-io/packages?repo_name=memobase">
+    <img src="https://img.shields.io/github/v/tag/memodb-io/memobase">
+    </a>
+  </p>
+  <p>
+    <a href="https://app.memobase.io/playground">
+       <img src="https://img.shields.io/badge/Memobase-Playground-blue">
+    </a>
     <a href="https://discord.gg/YdgwU4d9NB">
       <img src="https://dcbadge.limes.pink/api/server/YdgwU4d9NB?style=flat">
     </a>
+    <a href="https://github.com/memodb-io/memobase/issues/61">
+       <img src="https://img.shields.io/badge/群聊-wechat-green">
+    </a>
   </p>
 </div>
+
 
 
 
@@ -40,13 +54,13 @@ Memobase is a **user profile-based memory system** designed to bring long-term u
 
 
 
-Memobase can provide you structured user profiles of users, check out the [result](./docs/experiments/900-chats/readme.md) (compared with [mem0](https://github.com/mem0ai/mem0)) from a 900-turns real-world chatting:
-
+Memobase can provide you structured profiles of users, check out the [result](./docs/experiments/900-chats/readme.md) (compared with [mem0](https://github.com/mem0ai/mem0)) from a 900-turns real-world chatting:
 
 
 
 <details>
-<summary>Profile Output</summary>
+<summary>Partial Profile Output</summary>
+
 
 
 ```python
@@ -79,12 +93,33 @@ Memobase can provide you structured user profiles of users, check out the [resul
 
 ## Core Features
 
-- **🎯 Memory for User, not Agent**: Define and control exactly what user information your AI captures. 
-- ➡️ **Time-aware Memory**: Memobase saves specific dates in profiles to prevent outdated information from affecting your AI. Check [Memobase event](./assets/episodic_memory.py) for sequential events (episodic memory).
-- **🖼️ Contorllable Memory**: Among all types of memory, only some may enhance your product experience. Memobase offers a flexible configuration for you to [design the profile](https://docs.memobase.io/features/customization/profile).
-- **🔌 Easy Integration**: Minimal code changes to integrate with your existing LLM stack with API, [Python](https://pypi.org/project/memobase/)/[Node](./src/client/memobase-ts/readme.md)/[Go](./src/client/memobase-go/readme.md) SDK.
-- **⚡️ Batch Processing**: Industry-leading speeds via non-embedding system and session buffer. Fast & Cheap.
-- **🚀 Production Ready**: Battle-tested by our partners in production.
+**🎯 Memory for User, not Agent**
+
+Define and control exactly what user information your AI captures. 
+
+📈 **SOTA**
+
+check out performance on [public benchmark](./docs/experiments/locomo-benchmark) against mem0, langmem, zep...
+
+📅 **Time-aware Memory**
+
+Memobase has more than user profiles, it also records [user event](https://docs.memobase.io/features/event/event). User event is essiential to answer time-related question, see how we can [improve temporal memory much better](./docs/experiments/locomo-benchmark/README.md#Result) than other memory solutions.
+
+**🖼️ Contorllable Memory**
+
+Among all types of memory, only some may enhance your product experience. Memobase offers a flexible configuration for you to [design the profile](https://docs.memobase.io/features/profile/profile).
+
+**🔌 Easy Integration**
+
+Minimal code changes to integrate with your existing LLM stack with [API](https://docs.memobase.io/api-reference/overview), [Python](https://pypi.org/project/memobase/)/[Node](./src/client/memobase-ts/README.md)/[Go](./src/client/memobase-go/README.md) SDK.
+
+**⚡️ Batch-Process**:
+
+Memobase offers every user a buffer to batch processing the chats after the conversation. Fast & Cheap.
+
+**🚀 Production Ready**
+
+Memobase is building with FastAPI, Postgres and Redis, supporting request caching, authing, telemetry... [Fully dockerized](./src/server/readme.md).
 
 
 
@@ -100,24 +135,37 @@ Memobase can provide you structured user profiles of users, check out the [resul
 
 ## Get Started
 
-1. [Start your Memobase Backend](./src/server/readme.md), you should have the below two things to continue:
-   1. A project url. default to `http://localhost:8019` 
+> [!NOTE]
+>
+> Try [Memobase-Playground](https://github.com/memodb-io/memobase-playground), an open-source, full-stack AI Chatbot with long-term memory. [live-demo](https://app.memobase.io/playground)
 
-   2. A project token. default to `secret`
+<div align="center">
+  <a href="https://app.memobase.io/playground">
+  <img style="border-radius: 12px; width: 512px;" src="https://github.com/user-attachments/assets/f9431519-4693-43df-aaaa-560d8f531de7">
+  </a>
+<p>Memobase Playground</p>
+</div>
 
-2. Install the Python SDK: `pip install memobase`
-
-3. Get ready to make AI remember your users now.
 
 
+1. [Start your Memobase server locally](./src/server/readme.md). If you don't want to be bothered, Memobase Cloud provides [a free tier](https://www.memobase.io/en/login) enough for your testing
+2. You should have the below two things to continue:
+   1. A project url. (local: `http://localhost:8019` , cloud `https://api.memobase.dev`)
+   2. A project token. (local: `secret` , cloud `sk-proj-xxxxxx`)
+3. Install the Python SDK: `pip install memobase`
+4. Below tutorial is for Python User. For other language and API, check [this](https://docs.memobase.io/quickstart).
 
-Here's a step-by-step guide and breakdown for you. 
+
+
+## Step-by-step break down
 
 > [!TIP]
 >
-> You can just run this equivalent [quickstart script](./assets/quickstart.py)
+> - You can just run this equivalent [quickstart script](./assets/quickstart.py)
 >
-> Or you can keep things super easy by using [OpenAI SDK with Memobase.](https://docs.memobase.io/features/openai), [Ollama with Memobase](./assets/tutorials/ollama+memobase)
+> - Or you can keep things super easy by using [OpenAI SDK with Memobase.](https://docs.memobase.io/practices/openai), [Ollama with Memobase](./assets/tutorials/ollama+memobase).
+>
+> - Looking for [MCP](https://github.com/modelcontextprotocol)? Memobase-MCP is also [available](./src/mcp)
 
 ### 1. Make sure you're connected
 
@@ -228,8 +276,10 @@ Checkout the detail params [here](https://docs.memobase.io/api-reference/prompt/
 ### What's next?
 
 - Checkout the [quickstart script](./assets/quickstart.py) for more details
-- You may want to explore the [customization](https://docs.memobase.io/features/customization/profile) of Memobase to make sure the system works as your expectation.
+- You may want to explore the [customization](https://docs.memobase.io/features/profile/profile) of Memobase to make sure the system works as your expectation.
 - If you want to test Memobase on your own data, we offer a [script](./docs/experiments/chat_sessions) that allows you to set multiple chat sessions and see how the memory grows.
+- See our [integrations](https://docs.memobase.io/templates/livekit) to find anything may help you.
+- Check [Memobase-Playground](https://github.com/memodb-io/memobase-playground), an open-source, full-stack template AI Chatbot with long-term memory. [live-demo](https://app.memobase.io/playground)
 
 
 

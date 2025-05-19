@@ -5,6 +5,8 @@ from memobase_server.models import response as res
 from memobase_server.models.database import DEFAULT_PROJECT_ID
 from memobase_server.models.blob import BlobType
 from memobase_server.models.utils import Promise
+from memobase_server.env import CONFIG
+import numpy as np
 
 
 GD_FACTS = """
@@ -34,8 +36,10 @@ OVER_MAX_PROFILE_ATTRS = [
 ]
 
 MERGE_FACTS = [
+    "- UPDATE::Gus",
     "- UPDATE::user likes Chinese and Japanese food",
     "- UPDATE::High School",
+    "- UPDATE::Feels bored with high school",
 ]
 
 ORGANIZE_FACTS = """
@@ -63,15 +67,23 @@ def mock_extract_llm_complete():
 @pytest.fixture
 def mock_merge_llm_complete():
     with patch("memobase_server.controllers.modal.chat.merge.llm_complete") as mock_llm:
+        mock_client1 = AsyncMock()
+        mock_client1.ok = Mock(return_value=True)
+        mock_client1.data = Mock(return_value=MERGE_FACTS[0])
+
         mock_client2 = AsyncMock()
         mock_client2.ok = Mock(return_value=True)
-        mock_client2.data = Mock(return_value=MERGE_FACTS[0])
+        mock_client2.data = Mock(return_value=MERGE_FACTS[1])
 
         mock_client3 = AsyncMock()
         mock_client3.ok = Mock(return_value=True)
-        mock_client3.data = Mock(return_value=MERGE_FACTS[1])
+        mock_client3.data = Mock(return_value=MERGE_FACTS[2])
 
-        mock_llm.side_effect = [mock_client2, mock_client3]
+        mock_client4 = AsyncMock()
+        mock_client4.ok = Mock(return_value=True)
+        mock_client4.data = Mock(return_value=MERGE_FACTS[3])
+
+        mock_llm.side_effect = [mock_client1, mock_client2, mock_client3, mock_client4]
         yield mock_llm
 
 
@@ -93,17 +105,51 @@ def mock_event_summary_llm_complete():
     with patch(
         "memobase_server.controllers.modal.chat.event_summary.llm_complete"
     ) as mock_llm:
-        mock_client1 = AsyncMock()
-        mock_client1.ok = Mock(return_value=True)
-        mock_client1.data = Mock(return_value="Melinda is a software engineer")
 
-        mock_llm.side_effect = [mock_client1]
+        mock_client2 = AsyncMock()
+        mock_client2.ok = Mock(return_value=True)
+        mock_client2.data = Mock(return_value="- emotion::happy")
+
+        mock_llm.side_effect = [mock_client2]
         yield mock_llm
+
+
+@pytest.fixture
+def mock_entry_summary_llm_complete():
+    with patch(
+        "memobase_server.controllers.modal.chat.entry_summary.llm_complete"
+    ) as mock_llm:
+
+        mock_client2 = AsyncMock()
+        mock_client2.ok = Mock(return_value=True)
+        mock_client2.data = Mock(return_value="Melinda is a software engineer")
+
+        mock_llm.side_effect = [mock_client2]
+        yield mock_llm
+
+
+@pytest.fixture
+def mock_event_get_embedding():
+    with patch(
+        "memobase_server.controllers.event.get_embedding"
+    ) as mock_event_get_embedding:
+        async_mock = AsyncMock()
+        async_mock.ok = Mock(return_value=True)
+        async_mock.data = Mock(
+            return_value=np.array([[0.1 for _ in range(CONFIG.embedding_dim)]])
+        )
+        mock_event_get_embedding.return_value = async_mock
+        yield mock_event_get_embedding
 
 
 @pytest.mark.asyncio
 async def test_chat_buffer_modal(
-    db_env, mock_extract_llm_complete, mock_event_summary_llm_complete
+    db_env,
+    mock_extract_llm_complete,
+    mock_merge_llm_complete,
+    mock_event_summary_llm_complete,
+    mock_entry_summary_llm_complete,
+    mock_event_get_embedding,
 ):
     p = await controllers.user.create_user(res.UserData(), DEFAULT_PROJECT_ID)
     assert p.ok()
@@ -201,6 +247,8 @@ async def test_chat_merge_modal(
     mock_extract_llm_complete,
     mock_merge_llm_complete,
     mock_event_summary_llm_complete,
+    mock_entry_summary_llm_complete,
+    mock_event_get_embedding,
 ):
     p = await controllers.user.create_user(res.UserData(), DEFAULT_PROJECT_ID)
     assert p.ok()
@@ -275,15 +323,18 @@ async def test_chat_merge_modal(
     assert p.ok()
 
     assert mock_extract_llm_complete.await_count == 1
-    assert mock_merge_llm_complete.await_count == 2
+    assert mock_merge_llm_complete.await_count == 4
 
 
 @pytest.mark.asyncio
 async def test_chat_organize_modal(
     db_env,
     mock_extract_llm_complete,
+    mock_merge_llm_complete,
     mock_organize_llm_complete,
     mock_event_summary_llm_complete,
+    mock_entry_summary_llm_complete,
+    mock_event_get_embedding,
 ):
     p = await controllers.user.create_user(res.UserData(), DEFAULT_PROJECT_ID)
     assert p.ok()
@@ -319,11 +370,9 @@ async def test_chat_organize_modal(
 
     p = await controllers.profile.get_user_profiles(u_id, DEFAULT_PROJECT_ID)
     assert p.ok()
-    from rich import print
-
-    print(p.data())
 
     p = await controllers.user.delete_user(u_id, DEFAULT_PROJECT_ID)
     assert p.ok()
     assert mock_extract_llm_complete.await_count == 1
+    assert mock_merge_llm_complete.await_count == 4
     assert mock_organize_llm_complete.await_count == 1

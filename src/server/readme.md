@@ -7,7 +7,7 @@
   </a>
   <p><strong>The server-side of Memobase</strong></p>
   <p>
-    <img src="https://img.shields.io/badge/docker-0.0.5-blue">
+    <img src="https://img.shields.io/github/v/tag/memodb-io/memobase">
   </p>
 </div>
 
@@ -16,15 +16,35 @@
 
 ## Get started
 
-> [!NOTE]
->
-> You must fill the OpenAI API Key in `llm_api_key` of `config.yaml`
->
-> Or you can change `llm_base_url` to any OpenAI-SDK-Compatible service(via [vllm](https://github.com/vllm-project/vllm), [Ollama](../../assets/tutorials/ollama+memobase/readme.md),...)
->
-> Alternatively, you can set `llm_api_key` and `llm_base_url` using environment variables `MEMOBASE_LLM_API_KEY` and `MEMOBASE_LLM_BASE_URL`
+### Setup
+
+[**config.yaml**](https://docs.memobase.io/references/full)
+
+Memobase uses a single  `config.yaml` to initialize the server. It contains the configs of:
+
+- LLM: `llm_base_url`, `llm_api_key`, `best_llm_model`,...
+- Embedding: `enable_event_embedding`, `embedding_api_key`...
+- Memory: `max_pre_profile_token_size`, `max_profile_subtopics`, `additional_user_profiles`...
+
+By default, Memobase enables user profile and event memory with filter ability. That means running a Memobase server requires you to have below things:
+
+- **LLM API**: You must fill the OpenAI API Key in `llm_api_key` of `config.yaml`.Or you can change `llm_base_url` to any OpenAI-SDK-Compatible service(via [vllm](https://github.com/vllm-project/vllm), [Ollama](../../assets/tutorials/ollama+memobase/readme.md),...). Alternatively, you can set `llm_api_key` and `llm_base_url` using environment variables `MEMOBASE_LLM_API_KEY` and `MEMOBASE_LLM_BASE_URL`
+- **Embedding API**: Memobase supports OpenAI-Compatible SDK and [Jina Embedding](https://jina.ai/models/jina-embeddings-v3/). Memobase uses embedding API to retrieve related user events. If you don't have a embedding API, you can set `enable_event_embedding: false` in `config.yaml`
+
+We have some example `config.yaml` in `examplel_config`:
+
+- [`profile_for_assistant`](./api/example_config/profile_for_education),  [`profile_for_education`](./api/example_config/profile_for_education),  [`profile_for_companion`](./api/example_config/profile_for_companion)  are three similar configs in term of structure, but for different user cases.
+- [`event_tag`](./api/example_config/event_tag) is a feature to tracking temporal attributes of users. [doc](https://docs.memobase.io/features/event/event_tag)
+- [`only_strict_profile`](./api/example_config/only_strict_profile): disable all other features, only collect the profiles you design.
+- [`jina_embedding`](./api/example_config/jina_embedding) uses Jina exmbedding for event search.
 
 
+
+**environment variables**
+
+Check `./.env.example` for necessary vars. You can configure the running port and access token in here.  Also, anything in `config.yaml` can be override in env([doc](https://docs.memobase.io/references/full#environment-variable-overrides)), just starts with `MEMOBASE_`
+
+### Launch
 
 1. Make sure you have [docker-compose](https://docs.docker.com/compose/install/) installed.
 
@@ -37,7 +57,7 @@
    ```
 
    1. `.env` contains the service configs, like running port, secret token...
-   2. `config.yaml` contains the Memobase configs, like LLM model, profile slots. [docs](https://docs.memobase.io/features/customization/full)
+   2. `config.yaml` contains the Memobase configs, like LLM model, profile slots. [docs](https://docs.memobase.io/references/full)
 
 3. Run `docker-compose build && docker-compose up` to start the services.
 
@@ -45,7 +65,7 @@ Check out the [docs](https://docs.memobase.io/quickstart) of how to use Memobase
 
 
 
-## Use Memobase core sololy
+## Use Memobase core only
 
 1. If you have existing postgres and reids, you can only launch the Memobase core
 
@@ -59,14 +79,20 @@ Check out the [docs](https://docs.memobase.io/quickstart) of how to use Memobase
 
 4. Run the service:
    ```bash
-   docker run --env-file env.list ./api/config.yaml:/app/config.yaml -p 8019:8000 ghcr.io/memodb-io/memobase:main
+   docker run --env-file env.list -v ./api/config.yaml:/app/config.yaml -p 8019:8000 ghcr.io/memodb-io/memobase:main
    ```
 
 
-## SDKs
 
-- **Python**: `pip install memobase`. 
-- **Typescript**: `npm install @memobase/memobase`. More installations on [here](../client/memobase-ts/readme.md)
+## Development
+
+1. Start a local DB first by `sh script/up-dev.sh`
+2. Open a new terminal window and `cd ./api`
+3. Install python deps: `pip install -r requirements.txt`
+4. To test if you got everything right, run `pytest` to see if all the tests are passed.
+5. Launch Memobase Server in dev mode: `fastapi dev --port 8019`
+
+> `fastapi dev` has hot-reload, so you can just modify the code and test it without relaunch the service.
 
 
 

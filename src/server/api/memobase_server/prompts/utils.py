@@ -2,15 +2,15 @@ import re
 import json
 import difflib
 from ..env import LOG, CONFIG
+from ..types import attribute_unify
 from ..models.response import AIUserProfiles, AIUserProfile
 from ..models.blob import ChatBlob
 from ..utils import get_blob_str
 
-LIST_INT_PATTERN = re.compile(r"\[\d+(?:,\s*\d+)*\]")
-INT_INT_PATTERN = re.compile(r"\[(\d+)\]")
 
 EXCLUDE_PROFILE_VALUES = [
     # Chinese variations
+    "无",
     "未提及",
     "不清楚",
     "用户未提及",
@@ -20,7 +20,12 @@ EXCLUDE_PROFILE_VALUES = [
     "没有提到",
     "没有说明",
     "无法确定",
+    "无相关内容",
+    "未明确提及",
+    "无明确信息",
+    "无符合信息",
     # English variations
+    "none",
     "unknown",
     "not mentioned",
     "not mentioned by user",
@@ -31,6 +36,9 @@ EXCLUDE_PROFILE_VALUES = [
     "not determined",
     "no information",
     "n/a",
+    "no related content",
+    "no related information",
+    "no matched information",
 ]
 
 
@@ -38,10 +46,6 @@ def tag_chat_blobs_in_order_xml(
     blobs: list[ChatBlob],
 ):
     return "\n".join(get_blob_str(b) for b in blobs)
-
-
-def attribute_unify(attr: str):
-    return attr.lower().strip().replace(" ", "_")
 
 
 def extract_first_complete_json(s: str):
@@ -134,13 +138,11 @@ def convert_response_to_json(response: str) -> dict:
 
 
 def pack_merge_action_into_string(action: dict) -> str:
-    CONFIG.llm_tab_separator
     return f"- {action['action']}{CONFIG.llm_tab_separator}{action['memo']}"
 
 
 def parse_string_into_merge_action(results: str) -> dict | None:
-    lines = results.split("\n")[0]
-    lines = [l for l in lines.split("\n") if l.strip()]
+    lines = [l for l in results.split("\n") if l.strip()]
     lines = [l for l in lines if l.startswith("- ")]
     if not len(lines):
         return None
@@ -214,10 +216,16 @@ def parse_line_into_subtopic(line: str) -> dict:
     parts = line.split(CONFIG.llm_tab_separator)
     if not len(parts) == 2:
         return None
+    if meaningless_profile_memo(parts[1].strip()):
+        return None
     return {"sub_topic": attribute_unify(parts[0].strip()), "memo": parts[1].strip()}
 
 
 if __name__ == "__main__":
-    print(parse_line_into_profile("- basic_info::name::Gus"))
-    print(parse_line_into_profile("- basic_info::name::从未提及过"))
-    # print(parse_string_into_merge_action("- REPLACE::G"))
+    print(
+        parse_string_into_merge_action(
+            """The topic description requires the value to be the user's academic stage such as 'Senior One', 'Junior Three', 'Ph.D.'. The provided value is '博士' which is a valid academic stage and matches the description.
+---
+- REVISE::博士"""
+        )
+    )
