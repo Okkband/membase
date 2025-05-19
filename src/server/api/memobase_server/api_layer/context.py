@@ -2,6 +2,7 @@ import json
 
 from ..controllers import full as controllers
 
+from .. import utils
 from ..models.response import CODE
 from ..models.utils import Promise
 from ..models import response as res
@@ -49,6 +50,7 @@ async def get_user_context(
         description="Event similarity threshold of returned Context",
     ),
 ) -> res.UserContextDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     topic_limits_json = topic_limits_json or "{}"
     chats_str = chats_str or "[]"

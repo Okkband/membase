@@ -1,10 +1,10 @@
-FROM python:3.11-slim-buster AS build
+FROM --platform=linux/amd64 python:3.11-slim-buster AS build
 
 
 WORKDIR /app
 
 COPY ./requirements.txt /app/requirements.txt
-RUN python3.11 -m pip install -r requirements.txt --no-cache-dir
+RUN python3.11 -m pip install -r requirements.txt --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 COPY ./memobase_server /app/memobase_server
 COPY ./api.py /app

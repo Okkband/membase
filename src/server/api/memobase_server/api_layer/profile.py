@@ -5,10 +5,14 @@ from datetime import datetime
 from ..controllers import full as controllers
 from ..controllers.post_process.profile import filter_profiles_with_chats
 
+from .. import utils
 from ..models.response import CODE
 from ..models.utils import Promise
 from ..models.blob import BlobType
 from ..models import response as res
+from ..env import LOG
+from fastapi import Request
+from fastapi import Path, Query, Body
 
 
 async def get_user_profile(
@@ -43,6 +47,7 @@ async def get_user_profile(
     ),
 ) -> res.UserProfileResponse:
     """Get the real-time user profiles for long term memory"""
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     topic_limits_json = topic_limits_json or "{}"
     chats_str = chats_str or "[]"
@@ -85,6 +90,7 @@ async def delete_user_profile(
     profile_id: str = Path(..., description="The ID of the profile to delete"),
 ) -> res.BaseResponse:
     """Get the real-time user profiles for long term memory"""
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.profile.delete_user_profile(user_id, project_id, profile_id)
     return p.to_response(res.IdResponse)
@@ -99,6 +105,7 @@ async def update_user_profile(
     ),
 ) -> res.BaseResponse:
     """Update the real-time user profiles for long term memory"""
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.profile.update_user_profiles(
         user_id, project_id, [profile_id], [content.content], [content.attributes]
@@ -116,7 +123,13 @@ async def add_user_profile(
     ),
 ) -> res.IdResponse:
     """Add the real-time user profiles for long term memory"""
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
+    result = await controllers.user.get_user(user_id, project_id)
+    if result._Promise__errcode == CODE.NOT_FOUND:
+        LOG.info(f"User {user_id} not found")
+        p = await controllers.user.create_user(res.UserData(id=user_id), project_id)
+    
     p = await controllers.profile.add_user_profiles(
         user_id, project_id, [content.content], [content.attributes]
     )

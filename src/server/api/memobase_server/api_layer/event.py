@@ -1,4 +1,5 @@
 from ..controllers import full as controllers
+from .. import utils
 from ..models import response as res
 from fastapi import Request
 from fastapi import Path, Query, Body
@@ -17,6 +18,7 @@ async def get_user_events(
         description="Whether to return events with summaries",
     ),
 ) -> res.UserEventsDataResponse:
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.event.get_user_events(
         user_id, project_id, topk=topk, need_summary=need_summary
