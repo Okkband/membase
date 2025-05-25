@@ -1,5 +1,5 @@
 from ..controllers import full as controllers
-
+from .. import utils
 
 from ..models.blob import BlobType
 from ..models import response as res
@@ -13,6 +13,7 @@ async def flush_buffer(
     buffer_type: BlobType = Path(..., description="The type of buffer to flush"),
 ) -> res.ChatModalAPIResponse:
     """Get the real-time user profiles for long term memory"""
+    user_id = utils.generate_uuidv5_from_number(user_id)
     project_id = request.state.memobase_project_id
     p = await controllers.buffer.wait_insert_done_then_flush(
         user_id, project_id, buffer_type
